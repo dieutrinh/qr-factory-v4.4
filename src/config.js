@@ -1,12 +1,11 @@
 const fs = require("fs");
 const path = require("path");
 
-- const DEFAULT_CEG = {
-+ const DEFAULT_CFG = {
+const DEFAULT_CFG = {
   port: 3333,
   publicBaseUrl: "http://localhost:3333",
-  adminCode: "VCRR-DEFAULT-ADMIN",
-  appInstallUrl: "https://example.com/app.apk"
+  adminCode: "QRF-DEFAULT-ADMIN",
+  appInstallUrl: "https://example.com/app.apk",
 };
 
 function readJsonSafe(p, fallback) {
