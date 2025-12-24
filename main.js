@@ -1,30 +1,65 @@
-// v4.4 skeleton main.js
-// Merge this logic into your existing v4.3 main.js (do not break UI routing).
-const { app } = require("electron");
+const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
+const fs = require("fs");
+
 const { initPaths } = require("./src/paths");
 const { loadConfig } = require("./src/config");
 const { startServer } = require("./src/server");
 
-let server = null;
+let mainWindow;
+let server;
+
+function getBaseDir() {
+  // Ưu tiên portable (win-unpacked)
+  if (app.isPackaged) {
+    // resourcesPath = .../win-unpacked/resources
+    // exe nằm ở .../win-unpacked/
+    return path.dirname(process.execPath);
+  }
+  // dev mode
+  return process.cwd();
+}
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+    },
+  });
+
+  const indexHtml = path.join(__dirname, "www", "index.html");
+  mainWindow.loadFile(indexHtml);
+}
 
 app.whenReady().then(() => {
-  // Portable-friendly baseDir: folder containing executable (or project root when dev)
-  const baseDir = app.isPackaged ? path.dirname(app.getPath("exe")) : process.cwd();
+  try {
+    const baseDir = getBaseDir();
 
-  const runtime = initPaths(baseDir);
-  const { cfg, path: cfgPath } = loadConfig(baseDir);
+    // log tạm để debug portable
+    fs.writeFileSync(
+      path.join(baseDir, "boot.log"),
+      `[BOOT]\nbaseDir=${baseDir}\nexecPath=${process.execPath}\nresourcesPath=${process.resourcesPath}\n`
+    );
 
-  console.log("[v4.4] baseDir:", baseDir);
-  console.log("[v4.4] config:", cfgPath || "(defaults)");
-  console.log("[v4.4] runtime:", runtime);
+    const runtime = initPaths(baseDir);
+    const { cfg } = loadConfig(baseDir);
 
-  // Start local server for QR endpoints (bind 0.0.0.0 so phone can reach, if firewall allows)
-  const port = cfg.port || 3333;
-  server = startServer({ port, bindHost: "0.0.0.0" });
+    server = startServer({
+      port: cfg.port || 3333,
+      bindHost: "0.0.0.0",
+    });
 
-  // TODO: create BrowserWindow and load your existing UI (www/index.html)
-  // This skeleton intentionally avoids changing your UI code.
+    ipcMain.handle("getRuntimePaths", async () => runtime);
+
+    createWindow();
+  } catch (err) {
+    // log crash
+    const p = path.join(process.cwd(), "fatal.log");
+    fs.writeFileSync(p, err.stack || String(err));
+    throw err;
+  }
 });
 
 app.on("window-all-closed", () => {
