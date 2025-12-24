@@ -1,0 +1,17 @@
+{
+  "appId": "com.qrfactory.v44",
+  "productName": "QR Factory V4.4",
+  "directories": {
+    "output": "dist"
+  },
+  "files": [
+    "**/*",
+    "!dist/**"
+  ],
+  "extraResources": [
+    {
+      "from": "pack-v4.4",
+      "to": "pack-v4.4"
+    }
+  ]
+}
