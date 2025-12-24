@@ -1,3 +1,5 @@
+"use strict";
+
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -11,7 +13,7 @@ function startServer({ port = 3333, publicBaseUrl = "http://localhost:3333" } = 
       return;
     }
 
-    // Serve basic UI (www/index.html) if exists; otherwise show a simple page
+    // Serve UI
     const wwwDir = path.join(__dirname, "..", "www");
     const indexPath = path.join(wwwDir, "index.html");
 
@@ -39,9 +41,14 @@ function startServer({ port = 3333, publicBaseUrl = "http://localhost:3333" } = 
   });
 }
 
-async function stopServer(server) {
-  if (!server) return;
-  await new Promise((resolve) => server.close(() => resolve()));
+function stopServer(server) {
+  if (!server) return Promise.resolve();
+  return new Promise((resolve) => {
+    server.close(() => resolve());
+  });
 }
 
-module.exports = { startServer, stopServer };
+module.exports = {
+  startServer,
+  stopServer,
+};
