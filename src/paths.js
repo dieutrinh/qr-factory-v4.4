@@ -1,5 +1,5 @@
 \
-const fs = require("fs");
+const fs = const fs = require("fs");
 const path = require("path");
 
 function ensureDir(p){ if(!fs.existsSync(p)) fs.mkdirSync(p,{recursive:true}); }
