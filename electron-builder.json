@@ -8,10 +8,7 @@
     "**/*",
     "!dist/**"
   ],
-  "extraResources": [
-    {
-      "from": "pack-v4.4",
-      "to": "pack-v4.4"
-    }
-  ]
+  "win": {
+    "target": ["zip"]
+  }
 }
