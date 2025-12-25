@@ -3,7 +3,7 @@
 const { app, BrowserWindow, dialog } = require("electron");
 const path = require("path");
 
-const { ensureRuntimeDirs, getRuntimeDir } = require("./src/paths");
+const { ensureRuntimeDirs } = require("./src/paths");
 const { loadConfig } = require("./src/config");
 const { startServer, stopServer } = require("./src/server");
 
@@ -14,95 +14,71 @@ let quitting = false;
 function safeShowError(title, err) {
   try {
     dialog.showErrorBox(title, String(err && err.stack ? err.stack : err));
-  } catch (_) {
-    // ignore
-  }
+  } catch (_) {}
 }
 
-function createWindow(cfg) {
+function withTimeout(promise, ms, label = "Operation") {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
+function createWindow(startUrl) {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    show: true,
-    autoHideMenuBar: true,
+    width: 1100,
+    height: 700,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
     },
   });
 
-  // Không mở DevTools mặc định (portable test)
-  // mainWindow.webContents.openDevTools({ mode: "detach" });
+  // 1-click: load thẳng URL sau khi server sẵn sàng
+  mainWindow.loadURL(startUrl);
 
-  const port = Number(cfg && cfg.port ? cfg.port : 3333);
-  mainWindow.loadURL(`http://127.0.0.1:${port}`);
-
-  // ✅ Đóng cửa sổ là QUIT hẳn (Windows)
+  // Đóng cửa sổ = QUIT HẲN
   mainWindow.on("close", () => {
-    // close sẽ gọi before-quit -> stopServer sạch
     if (!quitting) app.quit();
-  });
-
-  mainWindow.on("closed", () => {
-    mainWindow = null;
   });
 }
 
 async function boot() {
-  // ✅ runtime cạnh exe
-  const baseDir = getRuntimeDir();
-  ensureRuntimeDirs(baseDir);
+  try {
+    ensureRuntimeDirs();
 
-  // ✅ load config.json / config.sample.json / default
-  const { cfg } = loadConfig(baseDir);
+    const cfg = loadConfig(); // giữ nguyên config của bạn
+    // Start server, có timeout để không “treo”
+    const started = await withTimeout(
+      startServer({ port: 3333, host: "127.0.0.1" }),
+      8000,
+      "Start server"
+    );
 
-  // ✅ start server
-  const started = await startServer({
-    port: cfg.port || 3333,
-    publicBaseUrl: cfg.publicBaseUrl || "http://localhost:3333",
-  });
-  httpServer = started.server;
+    httpServer = started.server;
 
-  createWindow(cfg);
+    createWindow(started.publicBaseUrl);
+  } catch (err) {
+    safeShowError("QR Factory failed to start", err);
+    try { app.quit(); } catch (_) {}
+  }
 }
 
-// ✅ Windows: nếu không còn cửa sổ -> quit luôn (không chạy nền)
-app.on("window-all-closed", () => {
-  app.quit();
-});
+app.whenReady().then(boot);
 
-// ✅ QUAN TRỌNG: đóng sạch server trước khi thoát để không lock file/folder
-app.on("before-quit", async (e) => {
+// Windows: không còn cửa sổ => quit
+app.on("window-all-closed", () => app.quit());
+
+// Trước khi thoát: stop server sạch
+app.on("before-quit", async () => {
   if (quitting) return;
-
   quitting = true;
-
   try {
-    if (httpServer) {
-      e.preventDefault(); // chặn quit để đóng server trước
-      const s = httpServer;
-      httpServer = null;
-
-      await stopServer(s);
-
-      // Sau khi stop sạch -> quit thật
-      app.quit();
-      return;
-    }
-  } catch (err) {
-    // Có lỗi vẫn cho quit
-    safeShowError("QR Factory - shutdown error", err);
-  }
-});
-
-// ✅ Start app
-app.whenReady().then(async () => {
-  try {
-    await boot();
-  } catch (err) {
-    safeShowError("QR Factory - boot error", err);
-    app.quit();
-  }
+    await stopServer(httpServer);
+  } catch (_) {}
+  // “chốt hạ” để không giữ handle gây lock
+  setTimeout(() => process.exit(0), 1500);
 });
