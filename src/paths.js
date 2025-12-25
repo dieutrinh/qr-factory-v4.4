@@ -1,37 +1,62 @@
 "use strict";
 
-const path = require("path");
 const fs = require("fs");
+const path = require("path");
 const { app } = require("electron");
 
-// Runtime nằm cạnh exe (portable)
+/**
+ * Base dir to store runtime next to the .exe (portable behavior).
+ * - Packaged:  <folder_of_exe>
+ * - Dev:       project root (process.cwd())
+ */
+function getBaseDir() {
+  try {
+    if (app && app.isPackaged) {
+      // e.g. D:\QRFactory_Test\v4.7\win-unpacked\QR Factory.exe
+      return path.dirname(process.execPath);
+    }
+  } catch (_) {}
+
+  // dev fallback
+  return process.cwd();
+}
+
+/**
+ * Runtime dir (always string)
+ */
 function getRuntimeDir() {
-  // Khi chạy build
-  if (app && app.isPackaged) {
-    return path.join(path.dirname(process.execPath), "runtime");
+  const baseDir = getBaseDir();
+  const runtimeDir = path.join(baseDir, "runtime");
+
+  if (typeof runtimeDir !== "string" || !runtimeDir.trim()) {
+    throw new Error(`getRuntimeDir() invalid: ${String(runtimeDir)}`);
+  }
+  return runtimeDir;
+}
+
+/**
+ * Create required runtime folders
+ */
+function ensureRuntimeDirs() {
+  const runtimeDir = getRuntimeDir(); // GUARANTEED string
+
+  const dirs = [
+    runtimeDir,
+    path.join(runtimeDir, "data"),
+    path.join(runtimeDir, "imports"),
+    path.join(runtimeDir, "exports"),
+    path.join(runtimeDir, "templates"),
+    path.join(runtimeDir, "logs"),
+  ];
+
+  for (const d of dirs) {
+    if (typeof d !== "string" || !d.trim()) {
+      throw new Error(`ensureRuntimeDirs() invalid path: ${String(d)}`);
+    }
+    fs.mkdirSync(d, { recursive: true });
   }
 
-  // Khi dev
-  return path.join(process.cwd(), "runtime");
+  return runtimeDir;
 }
 
-function ensureDir(p) {
-  if (!fs.existsSync(p)) {
-    fs.mkdirSync(p, { recursive: true });
-  }
-}
-
-// Tạo toàn bộ thư mục runtime cần thiết
-function ensureRuntimeDirs(baseDir) {
-  ensureDir(baseDir);
-  ensureDir(path.join(baseDir, "data"));
-  ensureDir(path.join(baseDir, "imports"));
-  ensureDir(path.join(baseDir, "exports"));
-  ensureDir(path.join(baseDir, "templates"));
-  ensureDir(path.join(baseDir, "logs"));
-}
-
-module.exports = {
-  getRuntimeDir,
-  ensureRuntimeDirs,
-};
+module.exports = { getRuntimeDir, ensureRuntimeDirs };
