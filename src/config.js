@@ -1,54 +1,58 @@
+"use strict";
+
 const fs = require("fs");
 const path = require("path");
+const { getRuntimeDir, ensureRuntimeDirs } = require("./paths");
 
 const DEFAULT_CFG = {
   port: 3333,
-  publicBaseUrl: "http://localhost:3333",
-  adminCode: "QRF-DEFAULT-ADMIN",
-  appInstallUrl: "https://example.com/app.apk",
+  host: "127.0.0.1",
+  // các field khác bạn có thể thêm ở đây, nhưng để tối thiểu cho chạy 1-click
 };
 
-function readJsonSafe(p, fallback) {
+function getConfigPath() {
+  // đảm bảo runtime luôn tồn tại
+  ensureRuntimeDirs();
+
+  const runtimeDir = getRuntimeDir();
+  if (typeof runtimeDir !== "string" || !runtimeDir.trim()) {
+    throw new Error(`Invalid runtimeDir in getConfigPath(): ${String(runtimeDir)}`);
+  }
+
+  return path.join(runtimeDir, "config.json");
+}
+
+function loadConfig() {
+  const cfgPath = getConfigPath();
+
+  // nếu chưa có config -> tạo default
+  if (!fs.existsSync(cfgPath)) {
+    fs.writeFileSync(cfgPath, JSON.stringify(DEFAULT_CFG, null, 2), "utf8");
+    return { ...DEFAULT_CFG, _cfgPath: cfgPath };
+  }
+
+  // đọc config
+  let raw = "";
   try {
-    if (!fs.existsSync(p)) return fallback;
-    const raw = fs.readFileSync(p, "utf8");
-    return JSON.parse(raw);
+    raw = fs.readFileSync(cfgPath, "utf8");
   } catch (_) {
-    return fallback;
+    return { ...DEFAULT_CFG, _cfgPath: cfgPath };
+  }
+
+  try {
+    const parsed = JSON.parse(raw || "{}");
+    return { ...DEFAULT_CFG, ...parsed, _cfgPath: cfgPath };
+  } catch (_) {
+    // config hỏng -> fallback
+    return { ...DEFAULT_CFG, _cfgPath: cfgPath, _cfgCorrupt: true };
   }
 }
 
-function writeJson(p, obj) {
-  fs.writeFileSync(p, JSON.stringify(obj, null, 2), "utf8");
+function saveConfig(newCfg) {
+  const cfgPath = getConfigPath();
+  const merged = { ...DEFAULT_CFG, ...(newCfg || {}) };
+  fs.writeFileSync(cfgPath, JSON.stringify(merged, null, 2), "utf8");
+  return { ...merged, _cfgPath: cfgPath };
 }
 
-function loadConfig(baseDir) {
-  const cfgPath = path.join(baseDir, "config.json");
-  const samplePath = path.join(baseDir, "config.sample.json");
-
-  // Nếu có config.json dùng nó
-  const fromCfg = readJsonSafe(cfgPath, null);
-  if (fromCfg) return { cfg: { ...DEFAULT_CFG, ...fromCfg }, cfgPath };
-
-  // Nếu không có config.json mà có config.sample.json, copy ra config.json
-  const fromSample = readJsonSafe(samplePath, null);
-  if (fromSample) {
-    const merged = { ...DEFAULT_CFG, ...fromSample };
-    writeJson(cfgPath, merged);
-    return { cfg: merged, cfgPath };
-  }
-
-  // Không có gì cả thì tạo config.json mặc định
-  writeJson(cfgPath, DEFAULT_CFG);
-  return { cfg: DEFAULT_CFG, cfgPath };
-}
-
-function saveConfig(baseDir, partial) {
-  const cfgPath = path.join(baseDir, "config.json");
-  const current = readJsonSafe(cfgPath, DEFAULT_CFG);
-  const merged = { ...current, ...partial };
-  writeJson(cfgPath, merged);
-  return { cfg: merged, cfgPath };
-}
-
-module.exports = { loadConfig, saveConfig, DEFAULT_CFG };
+module.exports = { DEFAULT_CFG, loadConfig, saveConfig, getConfigPath };
