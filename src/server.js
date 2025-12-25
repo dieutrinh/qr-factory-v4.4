@@ -1,54 +1,62 @@
 "use strict";
 
 const http = require("http");
-const fs = require("fs");
-const path = require("path");
 
-function startServer({ port = 3333, publicBaseUrl = "http://localhost:3333" } = {}) {
-  const server = http.createServer((req, res) => {
-    // Health check
-    if (req.url === "/health") {
-      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-      res.end(JSON.stringify({ ok: true, ts: Date.now(), publicBaseUrl }));
-      return;
-    }
-
-    // Serve UI
-    const wwwDir = path.join(__dirname, "..", "www");
-    const indexPath = path.join(wwwDir, "index.html");
-
-    if (req.url === "/" || req.url === "/index.html") {
-      if (fs.existsSync(indexPath)) {
-        const html = fs.readFileSync(indexPath, "utf8");
-        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(html);
-      } else {
-        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end("QR Factory v4.4 server is running.");
-      }
-      return;
-    }
-
-    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-    res.end("Not Found");
-  });
-
+function listenAsync(server, { host, port }) {
   return new Promise((resolve, reject) => {
-    server.on("error", reject);
-    server.listen(port, "127.0.0.1", () => {
-      resolve({ server, port });
-    });
+    const onError = (err) => {
+      server.removeListener("listening", onListening);
+      reject(err);
+    };
+    const onListening = () => {
+      server.removeListener("error", onError);
+      resolve();
+    };
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen(port, host);
   });
 }
 
-function stopServer(server) {
-  if (!server) return Promise.resolve();
-  return new Promise((resolve) => {
-    server.close(() => resolve());
+async function startServer({ host = "127.0.0.1", port = 3333, publicBaseUrl } = {}) {
+  const server = http.createServer((req, res) => {
+    // TODO: giữ nguyên router/handler hiện tại của bạn ở đây
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("OK");
+  });
+
+  const maxTry = 20;
+  let lastErr = null;
+
+  for (let i = 0; i < maxTry; i++) {
+    const tryPort = port + i;
+    try {
+      await listenAsync(server, { host, port: tryPort });
+      const base = publicBaseUrl || `http://${host}:${tryPort}`;
+      return { server, host, port: tryPort, publicBaseUrl: base };
+    } catch (err) {
+      lastErr = err;
+      if (err && err.code === "EADDRINUSE") continue;
+      // lỗi khác -> dừng luôn
+      try { server.close(); } catch (_) {}
+      throw err;
+    }
+  }
+
+  try { server.close(); } catch (_) {}
+  const msg = lastErr ? `${lastErr.code || ""} ${lastErr.message || lastErr}` : "Unknown";
+  throw new Error(`Cannot bind server port from ${port}..${port + maxTry - 1}: ${msg}`);
+}
+
+async function stopServer(server) {
+  if (!server) return;
+  await new Promise((resolve) => {
+    try {
+      server.close(() => resolve());
+    } catch (_) {
+      resolve();
+    }
   });
 }
 
-module.exports = {
-  startServer,
-  stopServer,
-};
+module.exports = { startServer, stopServer };
