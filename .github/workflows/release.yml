@@ -19,7 +19,7 @@ jobs:
           node-version: "20"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Build Windows portable (zip)
         run: npm run dist
@@ -31,3 +31,5 @@ jobs:
           path: |
             dist/*.zip
             dist/win-unpacked/**
+            package-lock.json
+            package.json
