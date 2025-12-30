@@ -35,9 +35,7 @@ function listenAsync(server, { host, port }) {
 }
 
 async function startServer({ host = "127.0.0.1", port = 3333, publicBaseUrl } = {}) {
-  // NOTE:
-  // - Khi đóng gói (asar), __dirname thường là .../resources/app.asar/src
-  // - www nằm ở .../resources/app.asar/www
+  // __dirname here is .../resources/app.asar/src when packaged
   const wwwDir = path.join(__dirname, "..", "www");
   const indexHtml = path.join(wwwDir, "index.html");
   const sharedCss = path.join(wwwDir, "shared.css");
@@ -45,7 +43,6 @@ async function startServer({ host = "127.0.0.1", port = 3333, publicBaseUrl } = 
   const server = http.createServer((req, res) => {
     const url = (req.url || "/").split("?")[0];
 
-    // Health check
     if (url === "/health") {
       return send(
         res,
@@ -55,15 +52,12 @@ async function startServer({ host = "127.0.0.1", port = 3333, publicBaseUrl } = 
       );
     }
 
-    // Static UI
     if (url === "/" || url === "/index.html") {
       return serveFile(res, indexHtml, "text/html; charset=utf-8");
     }
     if (url === "/shared.css") {
       return serveFile(res, sharedCss, "text/css; charset=utf-8");
     }
-
-    // (Tuỳ bạn) chặn favicon để khỏi 404 spam
     if (url === "/favicon.ico") {
       return send(res, 204, {}, "");
     }
@@ -71,7 +65,6 @@ async function startServer({ host = "127.0.0.1", port = 3333, publicBaseUrl } = 
     return send(res, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not Found");
   });
 
-  // Auto port retry
   const maxTry = 20;
   let lastErr = null;
 
@@ -84,17 +77,12 @@ async function startServer({ host = "127.0.0.1", port = 3333, publicBaseUrl } = 
     } catch (err) {
       lastErr = err;
       if (err && err.code === "EADDRINUSE") continue;
-      try {
-        server.close();
-      } catch (_) {}
+      try { server.close(); } catch (_) {}
       throw err;
     }
   }
 
-  try {
-    server.close();
-  } catch (_) {}
-
+  try { server.close(); } catch (_) {}
   const msg = lastErr ? `${lastErr.code || ""} ${lastErr.message || lastErr}` : "Unknown";
   throw new Error(`Cannot bind server port from ${port}..${port + maxTry - 1}: ${msg}`);
 }
