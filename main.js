@@ -39,15 +39,14 @@ function createWindow(startUrl) {
     },
   });
 
-  // Load UI
   if (startUrl && typeof startUrl === "string") {
     mainWindow.loadURL(startUrl);
   } else {
-    // fallback: load static UI nếu server không có URL (không để “treo”)
+    // fallback: load local UI if server didn't start
     mainWindow.loadFile(path.join(__dirname, "www", "index.html"));
   }
 
-  // Đóng cửa sổ = QUIT HẲN (không chạy nền)
+  // Close window = quit (no background)
   mainWindow.on("close", () => {
     if (!quitting) app.quit();
   });
@@ -55,48 +54,26 @@ function createWindow(startUrl) {
 
 async function boot() {
   try {
-    // tạo runtime cạnh exe trước
     ensureRuntimeDirs();
 
-    // đọc config từ runtime/config.json
     const cfg = loadConfig();
     const host = (cfg && cfg.host) || "127.0.0.1";
     const port = Number((cfg && cfg.port) || 3333);
 
-    // Start server có timeout để không “treo”
-    const started = await withTimeout(
-      startServer({ port, host }),
-      8000,
-      "Start server"
-    );
-
+    const started = await withTimeout(startServer({ port, host }), 8000, "Start server");
     httpServer = started.server;
 
-    // URL để load (được server trả về; nếu không có thì tự dựng)
-    const url =
-      (started && started.publicBaseUrl) || `http://${host}:${started.port || port}`;
-
+    const url = (started && started.publicBaseUrl) || `http://${host}:${started.port || port}`;
     createWindow(url);
   } catch (err) {
-    // Hiện lỗi rõ ràng rồi vẫn tạo cửa sổ fallback để user thấy UI (tuỳ bạn muốn)
     safeShowError("QR Factory failed to start", err);
-
-    // Nếu bạn muốn: vẫn cho UI local lên để debug, không “1-click treo”
-    try {
-      createWindow(null);
-    } catch (_) {}
-
-    // Hoặc nếu bạn muốn strict: quit luôn
-    // try { app.quit(); } catch (_) {}
+    try { createWindow(null); } catch (_) {}
   }
 }
 
 app.whenReady().then(boot);
-
-// Windows: không còn cửa sổ => quit hẳn
 app.on("window-all-closed", () => app.quit());
 
-// Trước khi thoát: stop server sạch để không lock win-unpacked
 app.on("before-quit", async () => {
   if (quitting) return;
   quitting = true;
@@ -105,6 +82,5 @@ app.on("before-quit", async () => {
     await stopServer(httpServer);
   } catch (_) {}
 
-  // “chốt hạ” để không giữ handle gây lock
   setTimeout(() => process.exit(0), 1500);
 });
