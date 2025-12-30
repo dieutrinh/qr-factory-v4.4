@@ -1,4 +1,4 @@
-name: Build Windows (v4.4)
+name: Build Windows (portable zip)
 
 on:
   workflow_dispatch: {}
@@ -9,7 +9,6 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -20,13 +19,15 @@ jobs:
           node-version: "20"
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Build Windows app
+      - name: Build Windows portable (zip)
         run: npm run dist
 
-      - name: Upload Windows artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dist-windows
-          path: dist/**
+          name: qr-factory-windows
+          path: |
+            dist/*.zip
+            dist/win-unpacked/**
